@@ -1,0 +1,54 @@
+trigger: none
+
+schedules:
+- cron: "0 1 * * 0"  # Runs every Sunday at 1 AM UTC
+  displayName: Weekly Branch Cleanup
+  branches:
+    include:
+    - main
+  always: true
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+parameters:
+- name: repoName
+  displayName: 'Repository to Clean (Leave blank for all repos)'
+  type: string
+  default: ''
+- name: dryRun
+  displayName: 'Dry Run Mode (Preview only, no deletions)'
+  type: boolean
+  default: true
+
+variables:
+  - group: BranchCleanupSecrets  # Define this variable group in Library
+
+steps:
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '3.x'
+    addToPath: true
+
+- script: |
+    python -m pip install --upgrade pip
+    pip install requests
+  displayName: 'Install dependencies'
+
+- script: |
+    python cleanup_branches.py
+  displayName: 'Run Branch Cleanup Script'
+  env:
+    ORGANIZATION: $(ORGANIZATION)
+    PROJECT: $(PROJECT)
+    PAT: $(PAT_TOKEN)
+    TEAMS_WEBHOOK_URL: $(TEAMS_WEBHOOK_URL)
+    REPO_NAME: ${{ parameters.repoName }}
+    DRY_RUN: ${{ parameters.dryRun }}
+
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Log Artifact'
+  inputs:
+    pathToPublish: 'deleted_branches.log'
+    artifactName: 'branch-cleanup-log'
+    publishLocation: 'Container'
