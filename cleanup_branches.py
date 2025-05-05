@@ -1,3 +1,8 @@
+Here is the updated version of your cleanup_branches.py script with Azure DevOps pipeline-compatible logging commands added via print() statements:
+
+
+---
+
 import os
 import requests
 from datetime import datetime, timedelta
@@ -27,7 +32,9 @@ headers = {
 base_url = f"https://dev.azure.com/{organization}/{project}/_apis"
 
 with open(log_file, "w") as log:
-    log.write(f"Branch cleanup started: {datetime.now()}\n")
+    start_msg = f"Branch cleanup started: {datetime.now()}"
+    print(f"##[section]{start_msg}")
+    log.write(start_msg + "\n")
     log.write("=" * 50 + "\n")
 
     # Get all repositories
@@ -37,7 +44,9 @@ with open(log_file, "w") as log:
     if repo_filter:
         repos = [r for r in all_repos if r['name'].lower() == repo_filter.lower()]
         if not repos:
-            log.write(f"Repository '{repo_filter}' not found in project '{project}'\n")
+            error_msg = f"Repository '{repo_filter}' not found in project '{project}'"
+            print(f"##[error]{error_msg}")
+            log.write(error_msg + "\n")
             exit(1)
     else:
         repos = all_repos
@@ -45,6 +54,7 @@ with open(log_file, "w") as log:
     for repo in repos:
         repo_id = repo['id']
         repo_name = repo['name']
+        print(f"##[section]Repository: {repo_name}")
         log.write(f"\nRepository: {repo_name}\n")
 
         branches_url = f"{base_url}/git/repositories/{repo_id}/refs?filter=heads/&api-version=7.0"
@@ -59,22 +69,28 @@ with open(log_file, "w") as log:
             commits = requests.get(commits_url, headers=headers).json().get('value', [])
 
             if not commits:
-                log.write(f"  Skipping '{branch_name}' (no commits found)\n")
+                msg = f"Skipping '{branch_name}' (no commits found)"
+                print(msg)
+                log.write(f"  {msg}\n")
                 continue
 
             last_commit_date = datetime.strptime(commits[0]['author']['date'], "%Y-%m-%dT%H:%M:%S%z")
             if last_commit_date < datetime.now(last_commit_date.tzinfo) - timedelta(days=days_threshold):
                 msg = f"[DRY RUN] Would delete '{branch_name}'" if is_dry_run else f"Deleting '{branch_name}'"
+                print(f"{msg} - last commit: {last_commit_date}")
                 log.write(f"  {msg} - last commit: {last_commit_date}\n")
 
                 if not is_dry_run:
                     delete_url = f"{base_url}/git/repositories/{repo_id}/refs?filter=heads/{branch_name}&api-version=7.0"
                     response = requests.delete(delete_url, headers=headers)
                     if response.status_code == 204:
+                        print(f"##[command]Deleted branch '{branch_name}' successfully.")
                         log.write("    Deleted successfully\n")
                     else:
+                        print(f"##[error]Failed to delete branch '{branch_name}': {response.status_code} {response.text}")
                         log.write(f"    Failed to delete: {response.status_code} {response.text}\n")
             else:
+                print(f"Keeping '{branch_name}' - last commit: {last_commit_date}")
                 log.write(f"  Keeping '{branch_name}' - last commit: {last_commit_date}\n")
 
 # Optional Teams webhook notification
@@ -93,6 +109,28 @@ if teams_webhook_url:
         if response.status_code == 200:
             print("Notification sent to Microsoft Teams.")
         else:
-            print(f"Failed to send Teams notification: {response.status_code}")
+            print(f"##[error]Failed to send Teams notification: {response.status_code}")
     except Exception as e:
-        print(f"Error sending Teams notification: {e}")
+        print(f"##[error]Error sending Teams notification: {e}")
+
+
+---
+
+Key Azure DevOps logging features added:
+
+##[section] for visual log separation per repo or stage.
+
+##[command] to highlight operations like deletions.
+
+##[error] for failures to make them stand out and be captured in pipeline error reports.
+
+
+Let me know if you want to also:
+
+Upload this updated script file.
+
+Add unit tests or dry-run test commands.
+
+Send a summary to Teams only when real deletions happen.
+
+
